@@ -23,6 +23,17 @@ console.log(
   "DISCORD_TOKEN確認:",
   process.env.DISCORD_TOKEN ? `あり（${process.env.DISCORD_TOKEN.length}文字）` : "なし"
 );
+fetch("https://discord.com/api/v10/users/@me", {
+  headers: {
+    Authorization: `Bot ${process.env.DISCORD_TOKEN}`
+  }
+})
+.then(async res => {
+  console.log("Discord API確認:", res.status);
+})
+.catch(err => {
+  console.error("Discord API通信エラー:", err);
+});
 client.login(process.env.DISCORD_TOKEN)
   .then(() => console.log("Discordへのログイン処理成功"))
   .catch(error => console.error("Discordログインエラー:", error));
