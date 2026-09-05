@@ -20,4 +20,10 @@ client.once("ready", () => {
   console.log(`Bot起動完了：${client.user.tag}`);
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN)
+  .then(() => console.log("Discordへのログイン処理成功"))
+  .catch(error => console.error("Discordログインエラー:", error));
+
+client.on("error", error => {
+  console.error("Discord Client Error:", error);
+});
