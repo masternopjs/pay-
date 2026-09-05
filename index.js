@@ -19,7 +19,10 @@ http.createServer((req, res) => {
 client.once("ready", () => {
   console.log(`Bot起動完了：${client.user.tag}`);
 });
-
+console.log(
+  "DISCORD_TOKEN確認:",
+  process.env.DISCORD_TOKEN ? `あり（${process.env.DISCORD_TOKEN.length}文字）` : "なし"
+);
 client.login(process.env.DISCORD_TOKEN)
   .then(() => console.log("Discordへのログイン処理成功"))
   .catch(error => console.error("Discordログインエラー:", error));
