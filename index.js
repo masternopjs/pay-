@@ -19,7 +19,9 @@ const client = new Client({
   ]
 });
 
+// ==============================
 // Railway用Webサーバー
+// ==============================
 const PORT = process.env.PORT || 3000;
 
 http
@@ -31,38 +33,46 @@ http
     console.log(`Web server started on port ${PORT}`);
   });
 
+// ==============================
 // 商品設定
+// ==============================
 const products = {
   normal: {
     name: "普通倉庫",
     price: 2500,
     roles: ["普通倉庫"]
   },
+
   special: {
     name: "特倉庫",
     price: 3500,
     roles: ["特倉庫"]
   },
+
   k: {
     name: "K倉庫",
     price: 2500,
     roles: ["K倉庫"]
   },
+
   normal_special: {
     name: "普通&特倉庫",
     price: 5500,
     roles: ["普通倉庫", "特倉庫"]
   },
+
   normal_k: {
     name: "普通&K倉庫",
     price: 4500,
     roles: ["普通倉庫", "K倉庫"]
   },
+
   special_k: {
     name: "特&K倉庫",
     price: 5500,
     roles: ["特倉庫", "K倉庫"]
   },
+
   all: {
     name: "全ての倉庫",
     price: 7500,
@@ -70,27 +80,40 @@ const products = {
   }
 };
 
+// ==============================
 // 購入情報を一時保存
+// ==============================
 const purchases = new Map();
 
+// ==============================
+// Bot起動
+// ==============================
 client.once(Events.ClientReady, readyClient => {
   console.log(`Bot起動完了: ${readyClient.user.tag}`);
 });
 
+// ==============================
 // 販売パネル
+// ==============================
 client.on(Events.MessageCreate, async message => {
   if (message.author.bot) return;
 
   if (message.content === "!販売パネル") {
+
+    // 管理者のみ実行可能
     if (
       !message.member.permissions.has(
         PermissionsBitField.Flags.Administrator
       )
     ) {
-      return message.reply("このコマンドは管理者専用です。");
+      return message.reply(
+        "このコマンドは管理者専用です。"
+      );
     }
 
+    // 1段目
     const row1 = new ActionRowBuilder().addComponents(
+
       new ButtonBuilder()
         .setCustomId("buy_normal")
         .setLabel("普通倉庫 2,500円")
@@ -107,7 +130,9 @@ client.on(Events.MessageCreate, async message => {
         .setStyle(ButtonStyle.Primary)
     );
 
+    // 2段目
     const row2 = new ActionRowBuilder().addComponents(
+
       new ButtonBuilder()
         .setCustomId("buy_normal_special")
         .setLabel("普通&特 5,500円")
@@ -119,7 +144,9 @@ client.on(Events.MessageCreate, async message => {
         .setStyle(ButtonStyle.Success)
     );
 
+    // 3段目
     const row3 = new ActionRowBuilder().addComponents(
+
       new ButtonBuilder()
         .setCustomId("buy_special_k")
         .setLabel("特&K 5,500円")
@@ -134,7 +161,9 @@ client.on(Events.MessageCreate, async message => {
     await message.channel.send({
       content:
         "## 🛒 倉庫購入\n\n" +
+
         "購入したい倉庫を選択してください。\n\n" +
+
         "普通倉庫：2,500円\n" +
         "特倉庫：3,500円\n" +
         "K倉庫：2,500円\n" +
@@ -142,93 +171,194 @@ client.on(Events.MessageCreate, async message => {
         "普通&K倉庫：4,500円\n" +
         "特&K倉庫：5,500円\n" +
         "全ての倉庫：7,500円",
+
       components: [row1, row2, row3]
     });
   }
 });
 
+// ==============================
 // ボタン処理
+// ==============================
 client.on(Events.InteractionCreate, async interaction => {
+
   if (!interaction.isButton()) return;
 
-  // 商品購入
+  // ============================
+  // 商品購入ボタン
+  // ============================
   if (interaction.customId.startsWith("buy_")) {
-    const productId = interaction.customId.replace("buy_", "");
+
+    const productId =
+      interaction.customId.replace("buy_", "");
+
     const product = products[productId];
 
     if (!product) return;
 
-    const purchaseId = `${interaction.user.id}_${Date.now()}`;
+    // 購入ごとのIDを作成
+    const purchaseId =
+      `${interaction.user.id}_${Date.now()}`;
 
     purchases.set(purchaseId, {
       userId: interaction.user.id,
-      productId
+      productId: productId
     });
 
-    const confirmRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`confirm_${purchaseId}`)
-        .setLabel("入金確認・ロール付与")
-        .setStyle(ButtonStyle.Success)
-    );
+    // 管理者用確認ボタン
+    const confirmRow =
+      new ActionRowBuilder().addComponents(
 
+        new ButtonBuilder()
+          .setCustomId(`confirm_${purchaseId}`)
+          .setLabel("入金確認・ロール付与")
+          .setStyle(ButtonStyle.Success)
+      );
+
+    // ============================
+    // 購入者本人への表示
+    // ============================
     await interaction.reply({
       content:
         `🛒 **${product.name}**\n\n` +
+
         `料金：**${product.price.toLocaleString()}円**\n\n` +
+
         "購入希望を受け付けました。\n" +
         "入金後、管理者が確認すると自動でアクセス権が付与されます。",
+
       ephemeral: true
     });
 
-    await interaction.channel.send({
-      content:
-        `📩 **購入申請**\n\n` +
-        `購入者：<@${interaction.user.id}>\n` +
-        `商品：**${product.name}**\n` +
-        `料金：**${product.price.toLocaleString()}円**\n\n` +
-        "管理者は入金確認後、下のボタンを押してください。",
-      components: [confirmRow]
-    });
+    // ============================
+    // 承認チャンネル取得
+    // ============================
+    try {
+
+      const adminChannel =
+        await interaction.guild.channels.fetch(
+          process.env.ADMIN_CHANNEL_ID
+        );
+
+      if (
+        !adminChannel ||
+        !adminChannel.isTextBased()
+      ) {
+
+        console.error(
+          "承認チャンネルが見つかりません。"
+        );
+
+        return interaction.followUp({
+          content:
+            "購入申請の送信先チャンネルが見つかりません。管理者に連絡してください。",
+          ephemeral: true
+        });
+      }
+
+      // ============================
+      // 承認チャンネルへ購入申請
+      // ============================
+      await adminChannel.send({
+        content:
+          `📩 **購入申請**\n\n` +
+
+          `購入者：<@${interaction.user.id}>\n` +
+
+          `商品：**${product.name}**\n` +
+
+          `料金：**${product.price.toLocaleString()}円**\n\n` +
+
+          "入金を確認したら、下のボタンを押してください。",
+
+        components: [confirmRow]
+      });
+
+    } catch (error) {
+
+      console.error(
+        "承認チャンネルへの送信エラー:",
+        error
+      );
+
+      return interaction.followUp({
+        content:
+          "購入申請の送信に失敗しました。管理者に連絡してください。",
+        ephemeral: true
+      });
+    }
 
     return;
   }
 
-  // 管理者の入金確認
-  if (interaction.customId.startsWith("confirm_")) {
+  // ============================
+  // 管理者の入金確認ボタン
+  // ============================
+  if (
+    interaction.customId.startsWith(
+      "confirm_"
+    )
+  ) {
+
+    // 管理者チェック
     if (
       !interaction.member.permissions.has(
         PermissionsBitField.Flags.Administrator
       )
     ) {
+
       return interaction.reply({
-        content: "このボタンは管理者専用です。",
+        content:
+          "このボタンは管理者専用です。",
         ephemeral: true
       });
     }
 
-    const purchaseId = interaction.customId.replace("confirm_", "");
-    const purchase = purchases.get(purchaseId);
+    const purchaseId =
+      interaction.customId.replace(
+        "confirm_",
+        ""
+      );
+
+    const purchase =
+      purchases.get(purchaseId);
 
     if (!purchase) {
+
       return interaction.reply({
-        content: "この購入情報は見つかりません。",
+        content:
+          "この購入情報は見つかりません。Botが再起動された可能性があります。",
         ephemeral: true
       });
     }
 
-    const product = products[purchase.productId];
-    const member = await interaction.guild.members.fetch(purchase.userId);
+    const product =
+      products[purchase.productId];
 
     try {
-      for (const roleName of product.roles) {
-        const role = interaction.guild.roles.cache.find(
-          r => r.name === roleName
+
+      const member =
+        await interaction.guild.members.fetch(
+          purchase.userId
         );
 
+      // ============================
+      // ロールを付与
+      // ============================
+      for (
+        const roleName of product.roles
+      ) {
+
+        const role =
+          interaction.guild.roles.cache.find(
+            r => r.name === roleName
+          );
+
         if (!role) {
+
           return interaction.reply({
-            content: `「${roleName}」ロールが見つかりません。`,
+            content:
+              `「${roleName}」ロールが見つかりません。`,
             ephemeral: true
           });
         }
@@ -236,34 +366,67 @@ client.on(Events.InteractionCreate, async interaction => {
         await member.roles.add(role);
       }
 
+      // 購入情報削除
       purchases.delete(purchaseId);
 
+      // ============================
+      // 承認済みに表示変更
+      // ============================
       await interaction.update({
         content:
           `✅ **入金確認・ロール付与完了**\n\n` +
+
           `購入者：<@${member.id}>\n` +
+
           `商品：**${product.name}**\n` +
+
           `料金：**${product.price.toLocaleString()}円**\n\n` +
-          `アクセス権を付与しました。`,
+
+          "アクセス権を付与しました。",
+
         components: []
       });
-    } catch (error) {
-      console.error(error);
 
-      await interaction.reply({
-        content:
-          "ロール付与に失敗しました。Botの権限とロール順を確認してください。",
-        ephemeral: true
-      });
+    } catch (error) {
+
+      console.error(
+        "ロール付与エラー:",
+        error
+      );
+
+      if (!interaction.replied) {
+
+        await interaction.reply({
+          content:
+            "ロール付与に失敗しました。Botの権限とロール順を確認してください。",
+          ephemeral: true
+        });
+      }
     }
   }
 });
 
+// ==============================
+// 環境変数確認
+// ※トークン本体は表示しない
+// ==============================
 console.log(
   "DISCORD_TOKEN確認:",
   process.env.DISCORD_TOKEN
-    ? `あり (${process.env.DISCORD_TOKEN.length}文字)`
+    ? "あり"
     : "なし"
 );
 
-client.login(process.env.DISCORD_TOKEN);
+console.log(
+  "ADMIN_CHANNEL_ID確認:",
+  process.env.ADMIN_CHANNEL_ID
+    ? "あり"
+    : "なし"
+);
+
+// ==============================
+// Discordログイン
+// ==============================
+client.login(
+  process.env.DISCORD_TOKEN
+);
