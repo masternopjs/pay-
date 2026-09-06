@@ -20,7 +20,7 @@ const client = new Client({
 });
 
 // ==============================
-// Railway用Webサーバー
+// Render / Railway 用Webサーバー
 // ==============================
 const PORT = process.env.PORT || 3000;
 
@@ -40,43 +40,50 @@ const products = {
   normal: {
     name: "普通倉庫",
     price: 2500,
-    roles: ["普通倉庫"]
+    roles: ["普通倉庫"],
+    paymentUrl: process.env.PAYMENT_URL_NORMAL
   },
 
   special: {
     name: "特倉庫",
     price: 3500,
-    roles: ["特倉庫"]
+    roles: ["特倉庫"],
+    paymentUrl: process.env.PAYMENT_URL_SPECIAL
   },
 
   k: {
     name: "K倉庫",
     price: 2500,
-    roles: ["K倉庫"]
+    roles: ["K倉庫"],
+    paymentUrl: process.env.PAYMENT_URL_K
   },
 
   normal_special: {
     name: "普通&特倉庫",
     price: 5500,
-    roles: ["普通倉庫", "特倉庫"]
+    roles: ["普通倉庫", "特倉庫"],
+    paymentUrl: process.env.PAYMENT_URL_NORMAL_SPECIAL
   },
 
   normal_k: {
     name: "普通&K倉庫",
     price: 4500,
-    roles: ["普通倉庫", "K倉庫"]
+    roles: ["普通倉庫", "K倉庫"],
+    paymentUrl: process.env.PAYMENT_URL_NORMAL_K
   },
 
   special_k: {
     name: "特&K倉庫",
     price: 5500,
-    roles: ["特倉庫", "K倉庫"]
+    roles: ["特倉庫", "K倉庫"],
+    paymentUrl: process.env.PAYMENT_URL_SPECIAL_K
   },
 
   all: {
     name: "全ての倉庫",
     price: 7500,
-    roles: ["普通倉庫", "特倉庫", "K倉庫"]
+    roles: ["普通倉庫", "特倉庫", "K倉庫"],
+    paymentUrl: process.env.PAYMENT_URL_ALL
   }
 };
 
@@ -174,7 +181,27 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!product) return;
 
-    // 購入情報をボタンIDそのものに保存
+    if (!product.paymentUrl) {
+      return interaction.reply({
+        content:
+          "この商品の支払いリンクが設定されていません。管理者に連絡してください。",
+        ephemeral: true
+      });
+    }
+
+    // ============================
+    // 支払いボタン
+    // ============================
+    const paymentRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setLabel("💳 支払いはこちら")
+        .setStyle(ButtonStyle.Link)
+        .setURL(product.paymentUrl)
+    );
+
+    // ============================
+    // 承認ボタン
+    // ============================
     const confirmCustomId =
       `confirm|${interaction.user.id}|${productId}`;
 
@@ -185,16 +212,22 @@ client.on(Events.InteractionCreate, async interaction => {
         .setStyle(ButtonStyle.Success)
     );
 
-    // 購入者本人だけに表示
+    // ============================
+    // 購入者本人だけに支払いリンク表示
+    // ============================
     await interaction.reply({
       content:
         `🛒 **${product.name}**\n\n` +
-        `料金：**${product.price.toLocaleString()}円**\n\n` +
-        "購入希望を受け付けました。\n" +
-        "入金後、管理者が確認すると自動でアクセス権が付与されます。",
+        `お支払い金額：**${product.price.toLocaleString()}円**\n\n` +
+        "下のボタンから支払いをお願いします。\n" +
+        "支払い後、管理者の入金確認までお待ちください。",
+      components: [paymentRow],
       ephemeral: true
     });
 
+    // ============================
+    // 承認チャンネルへ購入申請
+    // ============================
     try {
       const adminChannel =
         await interaction.guild.channels.fetch(
@@ -211,7 +244,6 @@ client.on(Events.InteractionCreate, async interaction => {
         });
       }
 
-      // 承認チャンネルへ送信
       await adminChannel.send({
         content:
           `📩 **購入申請**\n\n` +
@@ -221,8 +253,12 @@ client.on(Events.InteractionCreate, async interaction => {
           "入金を確認したら、下のボタンを押してください。",
         components: [confirmRow]
       });
+
     } catch (error) {
-      console.error("承認チャンネルへの送信エラー:", error);
+      console.error(
+        "承認チャンネルへの送信エラー:",
+        error
+      );
 
       return interaction.followUp({
         content:
@@ -249,7 +285,6 @@ client.on(Events.InteractionCreate, async interaction => {
       });
     }
 
-    // customIdから購入情報を復元
     const parts = interaction.customId.split("|");
 
     const userId = parts[1];
@@ -257,7 +292,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!userId || !productId) {
       return interaction.reply({
-        content: "購入情報の読み込みに失敗しました。",
+        content:
+          "購入情報の読み込みに失敗しました。",
         ephemeral: true
       });
     }
@@ -266,7 +302,8 @@ client.on(Events.InteractionCreate, async interaction => {
 
     if (!product) {
       return interaction.reply({
-        content: "商品情報が見つかりません。",
+        content:
+          "商品情報が見つかりません。",
         ephemeral: true
       });
     }
@@ -275,7 +312,9 @@ client.on(Events.InteractionCreate, async interaction => {
       const member =
         await interaction.guild.members.fetch(userId);
 
+      // ============================
       // ロール付与
+      // ============================
       for (const roleName of product.roles) {
         const role =
           interaction.guild.roles.cache.find(
@@ -293,7 +332,9 @@ client.on(Events.InteractionCreate, async interaction => {
         await member.roles.add(role);
       }
 
-      // 承認ボタンを消して完了表示
+      // ============================
+      // 完了表示
+      // ============================
       await interaction.update({
         content:
           `✅ **入金確認・ロール付与完了**\n\n` +
@@ -303,8 +344,12 @@ client.on(Events.InteractionCreate, async interaction => {
           "アクセス権を付与しました。",
         components: []
       });
+
     } catch (error) {
-      console.error("ロール付与エラー:", error);
+      console.error(
+        "ロール付与エラー:",
+        error
+      );
 
       if (!interaction.replied) {
         await interaction.reply({
@@ -322,16 +367,47 @@ client.on(Events.InteractionCreate, async interaction => {
 // ==============================
 console.log(
   "DISCORD_TOKEN確認:",
-  process.env.DISCORD_TOKEN
-    ? "あり"
-    : "なし"
+  process.env.DISCORD_TOKEN ? "あり" : "なし"
 );
 
 console.log(
   "ADMIN_CHANNEL_ID確認:",
-  process.env.ADMIN_CHANNEL_ID
-    ? "あり"
-    : "なし"
+  process.env.ADMIN_CHANNEL_ID ? "あり" : "なし"
+);
+
+console.log(
+  "PAYMENT_URL_NORMAL確認:",
+  process.env.PAYMENT_URL_NORMAL ? "あり" : "なし"
+);
+
+console.log(
+  "PAYMENT_URL_SPECIAL確認:",
+  process.env.PAYMENT_URL_SPECIAL ? "あり" : "なし"
+);
+
+console.log(
+  "PAYMENT_URL_K確認:",
+  process.env.PAYMENT_URL_K ? "あり" : "なし"
+);
+
+console.log(
+  "PAYMENT_URL_NORMAL_SPECIAL確認:",
+  process.env.PAYMENT_URL_NORMAL_SPECIAL ? "あり" : "なし"
+);
+
+console.log(
+  "PAYMENT_URL_NORMAL_K確認:",
+  process.env.PAYMENT_URL_NORMAL_K ? "あり" : "なし"
+);
+
+console.log(
+  "PAYMENT_URL_SPECIAL_K確認:",
+  process.env.PAYMENT_URL_SPECIAL_K ? "あり" : "なし"
+);
+
+console.log(
+  "PAYMENT_URL_ALL確認:",
+  process.env.PAYMENT_URL_ALL ? "あり" : "なし"
 );
 
 // ==============================
